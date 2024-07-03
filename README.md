@@ -5,5 +5,5 @@ This file generates .wav files from .mkv files, then deletes them during runtime
 -------------
 NOTE: This project assumes a couple of things
 
-1. The user has generates .mkv files into the `~/Movies/` directory
+1. The user generates .mkv files into the `~/Movies/` directory
 2. All transcripted files will be located in `~/Movies/Meeting transcriptions/`
