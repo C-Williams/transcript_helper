@@ -1,3 +1,2 @@
-openai-whisper
-setuptools-rust
+transformers==4.43.3
 pydub==0.25.1

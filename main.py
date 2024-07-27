@@ -1,8 +1,15 @@
 import argparse
 import os
-import whisper
+import warnings
+import torch
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor, pipeline
 
 from convert import convert_to_wav
+
+# Redirect warnings to /dev/null
+with open(os.devnull, 'w') as f:
+    warnings.simplefilter("ignore")
+    warnings.simplefilter(action='ignore', category=FutureWarning)
 
 class TranscriptHelper:
 
@@ -10,7 +17,28 @@ class TranscriptHelper:
         self.file = file
         self.print_transcription = print_transcription
         self.delete_file = delete_file
-        self.model = whisper.load_model("base")
+
+        device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        torch_dtype = torch.float16 if torch.cuda.is_available() else torch.float32
+
+        model_id = "openai/whisper-base.en"
+
+        model = AutoModelForSpeechSeq2Seq.from_pretrained(
+            model_id, torch_dtype=torch_dtype, use_safetensors=True
+        )
+        model.to(device)
+
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        self.pipe = pipeline(
+            "automatic-speech-recognition",
+            model=model,
+            tokenizer=processor.tokenizer,
+            feature_extractor=processor.feature_extractor,
+            max_new_tokens=128,
+            torch_dtype=torch_dtype,
+            device=device
+        )
 
         self.transcripted_files_file = "../Movies/Meeting transcriptions/transcripted_files.txt"
         os.makedirs(os.path.dirname(self.transcripted_files_file), exist_ok=True)
@@ -24,7 +52,7 @@ class TranscriptHelper:
 
             for audio_file in new_files:
                 try:
-                    transcribed_file = self.transcribe_file(audio_file, self.model)
+                    transcribed_file = self.transcribe_file()
                     transcripted_files.add(transcribed_file)
                 except Exception as e:
                     print(f"Error transcribing {audio_file}: {e}")
@@ -53,7 +81,7 @@ class TranscriptHelper:
                 exit(1)
 
         print(f"Transcribing file: {wav_file}")
-        result = self.model.transcribe(wav_file)
+        result = self.pipe(wav_file)
         if self.print_transcription:
             print(result["text"])
 
