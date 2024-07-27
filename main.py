@@ -1,91 +1,91 @@
 import argparse
 import os
-import subprocess
 import whisper
 
-def escape_path(path):
-    return path.replace(" ", "\\ ")
+from convert import convert_to_wav
 
-def convert_mkv_to_wav(mkv_file):
-    wav_file = mkv_file.rsplit('.', 1)[0] + '.wav'
-    escaped_mkv_file = escape_path(mkv_file)
-    escaped_wav_file = escape_path(wav_file)
-    command = f'ffmpeg -i {escaped_mkv_file} {escaped_wav_file}'
-    subprocess.run(command, shell=True, check=True)
-    return wav_file
+class TranscriptHelper:
 
-def transcribe_file(file, model):
-    delete_wav = False
-    wav_file = file
+    def __init__(self, file):
+        self.file = file
+        self.model = whisper.load_model("base")
 
-    if file.endswith('.mkv'):
-        wav_file = convert_mkv_to_wav(file)
-        delete_wav = True
+        self.transcripted_files_file = "../Movies/Meeting transcriptions/transcripted_files.txt"
+        os.makedirs(os.path.dirname(self.transcripted_files_file), exist_ok=True)
 
-    print(f"Transcribing file: {wav_file}")
-    result = model.transcribe(wav_file)
-    print(f"Transcription result: {result}")
+    def process_files(self):
+        if not self.file:
+            audio_files = self.get_audio_files(os.path.expanduser("../Movies"))
+            transcripted_files = self.read_transcripted_files(self.transcripted_files_file)
 
-    # Save the result to a text file
-    txt_file = os.path.join("..", "Movies", "Meeting transcriptions", os.path.basename(file).rsplit('.', 1)[0] + '.txt')
-    os.makedirs(os.path.dirname(txt_file), exist_ok=True)
+            new_files = [f for f in audio_files if f not in transcripted_files]
 
-    with open(txt_file, 'w') as f:
-        f.write(result["text"])
-    print(f"Transcription saved to {txt_file}")
+            for audio_file in new_files:
+                try:
+                    transcribed_file = self.transcribe_file(audio_file, self.model)
+                    transcripted_files.add(transcribed_file)
+                except Exception as e:
+                    print(f"Error transcribing {audio_file}: {e}")
 
-    # Delete the wav file if it was created
-    if delete_wav:
-        os.remove(wav_file)
-        print(f"Deleted temporary wav file: {wav_file}")
+            self.write_transcripted_files(self.transcripted_files_file, transcripted_files)
+        else:
+            transcribed_file = self.transcribe_file()
+            transcripted_files = self.read_transcripted_files(self.transcripted_files_file)
+            transcripted_files.add(transcribed_file)
+            self.write_transcripted_files(self.transcripted_files_file, transcripted_files)
 
-    return file
 
-def get_mkv_files(directory):
-    return [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith('.mkv')]
+    def escape_path(self, path):
+        return path.replace(" ", "\\ ")
 
-def read_transcripted_files(file):
-    if not os.path.exists(file):
-        return set()
-    with open(file, 'r') as f:
-        return set(f.read().splitlines())
+    def transcribe_file(self):
+        delete_wav = False
+        wav_file = self.file
 
-def write_transcripted_files(file, transcripted_files):
-    with open(file, 'w') as f:
-        for file in transcripted_files:
-            f.write(file + '\n')
+        if not self.file.endswith('.wav'):
+            wav_file = convert_to_wav(self.file, os.path.dirname(self.file))
+            if wav_file:
+                delete_wav = True
+            else:
+                print(f"Failed to convert {self.file} to WAV format")
+                return None
 
-def main(file):
-    model = whisper.load_model("base")
-    transcripted_files_file = "../Movies/Meeting transcriptions/transcripted_files.txt"
+        print(f"Transcribing file: {wav_file}")
+        result = self.model.transcribe(wav_file)
 
-    # Ensure the directory exists
-    os.makedirs(os.path.dirname(transcripted_files_file), exist_ok=True)
+        txt_file = os.path.join("..", "Movies", "Meeting transcriptions", os.path.basename(self.file).rsplit('.', 1)[0] + '.txt')
+        os.makedirs(os.path.dirname(txt_file), exist_ok=True)
 
-    if not file:
-        mkv_files = get_mkv_files(os.path.expanduser("../Movies"))
-        transcripted_files = read_transcripted_files(transcripted_files_file)
+        with open(txt_file, 'w') as f:
+            f.write(result["text"])
+        print(f"Transcription saved to {txt_file}")
 
-        new_files = [f for f in mkv_files if f not in transcripted_files]
+        if delete_wav:
+            os.remove(wav_file)
+            print(f"Deleted temporary wav file: {wav_file}")
 
-        for mkv_file in new_files:
-            try:
-                transcribed_file = transcribe_file(mkv_file, model)
-                transcripted_files.add(transcribed_file)
-            except Exception as e:
-                print(f"Error transcribing {mkv_file}: {e}")
+        return self.file
 
-        write_transcripted_files(transcripted_files_file, transcripted_files)
-    else:
-        transcribed_file = transcribe_file(file, model)
-        transcripted_files = read_transcripted_files(transcripted_files_file)
-        transcripted_files.add(transcribed_file)
-        write_transcripted_files(transcripted_files_file, transcripted_files)
+    def get_audio_files(self, directory):
+        supported_formats = ['.mkv', '.mp3', '.flac', '.aac', '.ogg', '.wma']
+        return [os.path.join(directory, f) for f in os.listdir(directory) if os.path.splitext(f)[1].lower() in supported_formats]
+
+    def read_transcripted_files(self, file):
+        if not os.path.exists(file):
+            return set()
+        with open(file, 'r') as f:
+            return set(f.read().splitlines())
+
+    def write_transcripted_files(self, file, transcripted_files):
+        with open(file, 'w') as f:
+            for file in transcripted_files:
+                f.write(file + '\n')
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Transcribe audio files using Whisper. Accepts .mkv or .wav files. However, search only works with .mkv")
+    parser = argparse.ArgumentParser(description="Transcribe audio files using Whisper. Accepts various audio file formats.")
     parser.add_argument('file', nargs='?', help='Path to the audio file to be transcribed')
 
     args = parser.parse_args()
 
-    main(args.file)
+    helper = TranscriptHelper(args.file)
+    helper.process_files()
