@@ -5,6 +5,7 @@
 # When giving the file path, make sure to use the absolute path and wrap it in quotes
 FILE := ""
 PRINT := ""
+DELETE := ""
 
 # CD into the transcript_helper directory and create a virtual environment
 # Then install the required packages and ffmpeg
@@ -20,7 +21,7 @@ venv:
 run: venv
 	cd transcript_helper && \
 	. .venv/bin/activate && \
-	python3 main.py $(FILE) $(PRINT)
+	python3 main.py $(FILE) $(PRINT) $(DELETE)
 
 check-dependencies:
 	command -v cmake >/dev/null 2>&1 || { \
