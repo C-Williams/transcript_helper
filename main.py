@@ -6,8 +6,9 @@ from convert import convert_to_wav
 
 class TranscriptHelper:
 
-    def __init__(self, file):
+    def __init__(self, file, print_transcription=False):
         self.file = file
+        self.print_transcription = print_transcription
         self.model = whisper.load_model("base")
 
         self.transcripted_files_file = "../Movies/Meeting transcriptions/transcripted_files.txt"
@@ -48,10 +49,12 @@ class TranscriptHelper:
                 delete_wav = True
             else:
                 print(f"Failed to convert {self.file} to WAV format")
-                return None
+                exit(1)
 
         print(f"Transcribing file: {wav_file}")
         result = self.model.transcribe(wav_file)
+        if self.print_transcription:
+            print(result["text"])
 
         txt_file = os.path.join("..", "Movies", "Meeting transcriptions", os.path.basename(self.file).rsplit('.', 1)[0] + '.txt')
         os.makedirs(os.path.dirname(txt_file), exist_ok=True)
@@ -77,6 +80,7 @@ class TranscriptHelper:
             return set(f.read().splitlines())
 
     def write_transcripted_files(self, file, transcripted_files):
+        print(f"Writing transcripted files to {file}")
         with open(file, 'w') as f:
             for file in transcripted_files:
                 f.write(file + '\n')
@@ -84,8 +88,14 @@ class TranscriptHelper:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Transcribe audio files using Whisper. Accepts various audio file formats.")
     parser.add_argument('file', nargs='?', help='Path to the audio file to be transcribed')
+    # Here we add an optional argument to print the transcription to the console. However, because this script is meant to be run as a make file,
+    # this argument is a string. If the string is not empty, the transcription will be printed.
+    parser.add_argument('print', type=str, help='Print the transcription to the console')
 
     args = parser.parse_args()
-
-    helper = TranscriptHelper(args.file)
+    if args.print:
+        if args.print.lower() != 'true':
+            print("Invalid argument for 'PRINT'. Expected 'true' or nothing.")
+            exit(1)
+    helper = TranscriptHelper(args.file, args.print)
     helper.process_files()
